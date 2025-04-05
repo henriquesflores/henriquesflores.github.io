@@ -1,0 +1,67 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0 200px;
+    line-height: 1.5;
+    font-family: 'STIX Two Text', serif;
+/*    border: 5px solid black; */
+}
+
+nav {
+    display: flex; /* Enables Flexbox */
+    flex-direction: row; /* Align items in a row (default) */
+    justify-content: space-between; /* Space out items evenly */
+    align-items: center; /* Align items vertically in the center */
+    background-color: #f8f9fa; /* Optional: Add a background color */
+    padding: 10px 20px; /* Add padding inside the nav bar */
+    border-radius: 5px; /* Optional: Add rounded corners */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Optional: Add a subtle shadow */
+}
+
+nav ul {
+    display: flex; /* Make the list items flex */
+    gap: 15px; /* Add spacing between list items */
+}
+
+nav ul li {
+    list-style: none; /* Remove default bullet points */
+}
+
+nav ul li a {
+    text-decoration: none; /* Remove underline from links */
+    color: #333; /* Set link color */
+    font-weight: bold; /* Make links bold */
+    padding: 5px 10px; /* Add padding around links */
+    border-radius: 3px; /* Optional: Add rounded corners to links */
+    transition: background-color 0.3s ease; /* Smooth hover effect */
+}
+
+nav ul li a:hover {
+    background-color: #e2e6ea; /* Change background on hover */
+    color: #000; /* Change text color on hover */
+}
+
+ol, ul {
+    list-style: none;
+}
+
+main {
+    margin: 20px 0; /* Add margin to the main content area */
+    padding: 20px; /* Add padding inside the main content area */
+    background-color: #fff; /* Set background color for main content */
+    border-radius: 5px; /* Optional: Add rounded corners */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Optional: Add a subtle shadow */
+}
+
+main section {
+    margin-bottom: 20px; /* Add space between sections */
+    padding: 10px; /* Add padding inside each section */
+}
+
+h1, h2 {
+    font-family: 'Open Sans', sans-serif;
+}

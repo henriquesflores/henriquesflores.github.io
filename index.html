@@ -4,41 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Welcome to my GitHub Pages site with MathJax support!">
-    <title>My GitHub Page with MathJax</title>
+    <title>Henrique Flores</title>
     <link href="https://fonts.googleapis.com/css2?family=STIX+Two+Text&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="./style.css">
+    <script src="mathjax-config.js"></script>
     <script type="text/javascript" id="MathJax-script" async
         src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
     </script>
-    <style>
-        body {
-            font-family: 'STIX Two Text', serif;
-        }
-
-        h1, h2 {
-            font-family: 'Open Sans', sans-serif;
-        }
-    </style>
 </head>
 <body>
-    <header>
-        <h1>Welcome to My GitHub Page</h1>
-        <nav>
-            <ul>
-                <li><a href="#about">About</a></li>
-                <li><a href="#projects">Projects</a></li>
-                <li><a href="#math">Math</a></li>
-                <li><a href="#contact">Contact</a></li>
-            </ul>
-        </nav>
-    </header>
+    <nav>
+        <header>
+            <h1>Henrique Flores</h1>
+        </header>
+        <ul>
+            <li><a href="https://github.com/henriquesflores/about.html", target="_self">About</a></li>
+            <li><a href="#projects">Projects</a></li>
+            <li><a href="#math">Math</a></li>
+            <li><a href="https://www.linkedin.com/in/henriquesflores/", target="_self">Contact</a></li>
+        </ul>
+    </nav>
 
     <main>
-        <section id="about">
-            <h2>About Me</h2>
-            <p>Hello! This is a simple GitHub Pages site with MathJax support for LaTeX equations.</p>
-        </section>
-
         <section id="projects">
             <h2>Projects</h2>
             <ul>
@@ -47,22 +34,20 @@
                 <li><a href="https://github.com/henriquesflores/project3" target="_blank">Project 3</a></li>
             </ul>
         </section>
-
-        <section id="math">
-            <h2>Math</h2>
-            <p>Here is an example of a LaTeX equation rendered with MathJax:</p>
-            <p>Inline equation: \( E = mc^2 \)</p>
-            <p>Block equation:</p>
+        
+        <section id="equations"> 
             <div>
-                \[
-                \int_{a}^{b} x^2 \, dx = \frac{b^3}{3} - \frac{a^3}{3}
-                \]
+                $$ 
+                    H | \psi \rangle = \frac{d}{dt} | \psi \rangle 
+                    \quad  \quad \\
+                    R_{\mu \nu} - \frac{1}{2}g_{\mu\nu} R = 8 \pi G T_{\mu\nu}
+                $$
             </div>
         </section>
 
         <section id="contact">
             <h2>Contact</h2>
-            <p>Feel free to reach out to me via <a href="mailto:your-email@example.com">email</a> or connect with me on <a href="https://www.linkedin.com/in/your-profile" target="_blank">LinkedIn</a>.</p>
+            <p>Feel free to reach out to me via LinkedIn <a href="https://www.linkedin.com/in/henriquesflores/" target="_blank">LinkedIn</a>.</p>
         </section>
     </main>
 
