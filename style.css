@@ -4,14 +4,19 @@
     box-sizing: border-box;
 }
 
+/* Make the body a flex container */
 body {
-    margin: 0 200px;
+    display: flex;
+    flex-direction: column; /* Arrange children in a column */
+    min-height: 100vh; /* Ensure the body takes up the full viewport height */
+    margin: 0; /* Remove default margin */
     line-height: 1.5;
     font-family: 'STIX Two Text', serif;
 /*    border: 5px solid black; */
 }
 
 nav {
+    padding: 0 150px;
     display: flex; /* Enables Flexbox */
     flex-direction: row; /* Align items in a row (default) */
     justify-content: space-between; /* Space out items evenly */
@@ -49,12 +54,19 @@ ol, ul {
     list-style: none;
 }
 
+a {
+    text-decoration: none; /* Remove underline from links */
+    color: #007bff; /* Set link color */
+    transition: color 0.3s ease; /* Smooth color transition */
+}
+
+/* Allow the main content to grow and take up available space */
 main {
+    flex: 1; /* Makes the main content expand to fill available space */
     margin: 20px 0; /* Add margin to the main content area */
     padding: 20px; /* Add padding inside the main content area */
     background-color: #fff; /* Set background color for main content */
     border-radius: 5px; /* Optional: Add rounded corners */
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Optional: Add a subtle shadow */
 }
 
 main section {
@@ -64,4 +76,24 @@ main section {
 
 h1, h2 {
     font-family: 'Open Sans', sans-serif;
+}
+
+.main-content {
+    margin: 0 200px;
+}
+
+.main-content ul li {
+    margin: 5px 0;
+}
+
+/* Optional: Style the footer */
+footer {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between; 
+    text-align: center; /* Center the text */
+    padding: 10px 20px; /* Add padding inside the footer */
+    background-color: #f8f9fa; /* Light background color */
+    border-top: 1px solid #ddd; /* Optional: Add a top border */
 }
