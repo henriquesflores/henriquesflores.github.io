@@ -8,4 +8,5 @@ CALL "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\v
 
 PUSHD "build"
     cl /EHsc /Zi /Fe:PageParser.exe ..\PageParser\main.c
+    cl /EHsc /Zi /Fe:tests.exe ..\PageParser\tests.c
 POPD

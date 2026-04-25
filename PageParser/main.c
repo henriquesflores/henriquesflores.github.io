@@ -1,8 +1,10 @@
+#include <assert.h>
 #include <stdio.h> 
 #include <stdlib.h>
 #include <ctype.h>
 
 #include "types.h"
+#define DEFAULT_ARRAY_SIZE 128
 
 
 struct string_view {
@@ -11,16 +13,28 @@ struct string_view {
 };
 
 
-void free_sv(struct string_view *c)
+struct sv_vector {
+    usize size; 
+    usize capacity; 
+    struct string_view *data;
+}
+
+
+internal struct string_view sv(char *s) 
+{
+    return (struct string_view) {strlen(s), s};
+}
+
+
+internal void free_sv(struct string_view *c)
 {
     free(c->data);
-    c->data = 0;
     c->size = 0;
 }
 
 
-internal struct string_view 
-read_entire_file(u8 *filename) 
+internal 
+struct string_view read_entire_file(char *filename) 
 {
     // TODO (Henrique): Move later to a way where text can be streamed in blocks
     // instead of loading the entire file into memory;
@@ -84,30 +98,91 @@ exit:
 }
 
 
+struct memory_arena {
+    u64 size;
+    u8 *bytes; 
+};
+
+
+internal struct memory_arena arena_init(u64 size)
+{
+    u8 *bytes = malloc(size);
+    if (!bytes) {
+        fprintf(stderr, "[ERROR]: Arena failed to allocate. There is no memory to parse this markdown\n");
+        exit(1);
+    }
+    return (struct memory_arena) {size, bytes};
+}
+
+
+global_variable struct memory_arena global_arena;
+global_variable struct memory_arena tree_arena;
+global_variable struct memory_arena vector_arena;
+internal void *_pushArenaImpl(struct memory_arena *a, usize size)
+{
+    if (a->size <= size) 
+        return 0;
+    
+    void *address = a->bytes + a->size;
+    a->size += size;
+    return address;
+}
+#define PUSH(arena, type) _pushArenaImpl(&(arena), sizeof(type))
+
+
+internal void *_pushArenaArrayImpl(struct memory_arena *a, usize struct_size, usize array_size)
+{
+    usize total_size = struct_size * array_size;
+    return _pushArenaImpl(a, total_size);
+}
+#define PUSH_ARRAY(arena, type, size) _pushArenaArrayImpl(&(arena), sizeof(type), size)
+
+
+internal struct sv_vector alloc_string_view(usize size)
+{
+    struct string_view *s = PUSH_ARRAY(vector_arena, struct string_view, size);
+    if (!s) {
+        fprintf(stderr, "[ERROR]: Failed to allocate memory for string view array\n");
+        exit(1);
+    }
+
+    struct sv_vector result = {0, size, s};
+    return result;
+}
+
+
+internal b32 push_string_view(struct sv_vector *s, struct string_view v)
+{
+    if (s->size >= s->capacity) {
+        return 0;
+    }
+
+    s->data[s->size] = v;
+    s->size = s->size + 1;
+    return 1;
+}
+
+
 enum token_kind {
     TOKEN_UNKNOWN = 0,
     TOKEN_HEAD,
     TOKEN_TITLE,
     TOKEN_SECTION,
+    TOKEN_SUBSECTION, 
     TOKEN_NUMBER,
-    TOKEN_PLUS,
-    TOKEN_MINUS,
-    TOKEN_EQUALS,
     TOKEN_OPEN_BRACKET, 
     TOKEN_CLOSE_BRACKET, 
     TOKEN_OPEN_PARENTHESIS,
     TOKEN_CLOSE_PARENTHESIS,
     TOKEN_OPEN_BRACE,
     TOKEN_CLOSE_BRACE,
-    TOKEN_BRA, 
-    TOKEN_KET,
     TOKEN_EQUAL,
-    TOKEN_WORD,
-    TOKEN_SUBSECTION, 
-    TOKEN_DOLLAR_SIGN,
+    TOKEN_PARAGRAPH,
+    TOKEN_INLINE_EQUATION,
+    TOKEN_EQUATION,
     TOKEN_BOLD,
     TOKEN_ITALIC,
-    TOKEN_COUNT,
+    TOKEN_KIND_COUNT,
 };
 
 
@@ -119,15 +194,13 @@ struct markdown_parser {
 };
 
 
-internal struct string_view sv(char *s) 
-{
-    return (struct string_view) {strlen(s), s};
-}
-
 
 struct markdown_token {
     enum token_kind kind;
-    struct string_view item;
+    union {
+        struct string_view item;
+        struct sv_vector array;
+    };
 };
 
 
@@ -254,12 +327,25 @@ struct parser_snapshot get_snapshot(struct markdown_parser *p)
 }
 
 
+internal b32 is_paragraph(struct markdown_parser *p)
+{
+    if (is_in_bounds(p)) {
+        b32      is_equation = strncmp(at(p),  "$$",  strlen("$$")) == 0;
+        b32    is_subsection = strncmp(at(p),  "##",  strlen("##")) == 0;
+        b32 is_subsubsection = strncmp(at(p), "###", strlen("###")) == 0;
+        b32 result = is_equation || is_subsection || is_subsubsection;
+        return !result;
+    }
+    return 0;
+}
+
+
 internal 
 struct markdown_token parse_token(struct markdown_parser *parser)
 {
-    struct markdown_token result = {0}; 
-    result.kind = TOKEN_UNKNOWN; 
-    result.item = sv("");
+    struct markdown_token result = {
+        TOKEN_UNKNOWN, sv("")
+    }; 
 
     skip_while(parser, is_space);
     if (is_in_bounds(parser)) {
@@ -295,7 +381,7 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                 result.kind = TOKEN_CLOSE_BRACE;
             } break;
             case '$': {
-                result.kind = TOKEN_DOLLAR_SIGN;
+                result.kind = TOKEN_INLINE_EQUATION;
             } break;
             case '-': {
                 // This is an interesting case. I can be a negative number of some bs;
@@ -313,9 +399,18 @@ struct markdown_token parse_token(struct markdown_parser *parser)
 //                result.kind = TOKEN_NUMBER;
             } break;
             default: {
-                struct string_view line = extract_while(parser, not_space);
-                result.kind = TOKEN_WORD;
-                result.item = line;
+                result.kind = TOKEN_PARAGRAPH;
+                struct sv_vector s = alloc_string_view(DEFAULT_ARRAY_SIZE);
+                do {
+                    struct string_view word = extract_while(parser, not_space);
+                    if (push_string_view(&s, word)) {
+                        skip_while(parser, is_space);
+                    } else {
+                        parser->has_error = 1;
+                        break;
+                    }
+                } while (is_paragraph(parser));
+                result.array = s;
             } break;
         }
     }
@@ -323,43 +418,10 @@ struct markdown_token parse_token(struct markdown_parser *parser)
 }
 
 
-struct memory_arena {
-    u8 *bytes; 
-    u64 size;
-};
-
-
-internal 
-struct memory_arena arena_init(u64 size)
-{
-    u8 *bytes = malloc(size);
-    if (!bytes) {
-        fprintf(stderr, "[ERROR]: Arena failed to allocate. There is no memory to parse this markdown\n");
-        exit(1);
-    }
-    return (struct memory_arena) {bytes, size};
-}
-
-
-internal void *_pushArenaImpl(struct memory_arena *a, usize size)
-{
-    i64 remaining = a->size - size;
-    if (remaining <= 0) 
-        return NULL;
-    
-    void *address = a->bytes + a->size;
-    a->size += size;
-    return address;
-}
-#define PUSH(arena, type) _pushArenaImpl(&(arena), sizeof(type))
-
-
-global_variable struct memory_arena global_arena;
-
-
 internal struct markdown_node *alloc_markdown_node(struct markdown_token t)
 {
-    struct markdown_node *n = PUSH(global_arena, struct markdown_node);
+    assert(tree_arena.size != 0);
+    struct markdown_node *n = PUSH(tree_arena, struct markdown_node);
     if (!n) {
         fprintf(stderr, "[ERROR]: Failed to allocate markdown node. Entire process is killed.\n");
         exit(1);
@@ -391,14 +453,20 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_node *n)
 
 int main(int argc, char **argv) 
 {
-#define TEST_FILE "posts/about.md"
+#define TEST_FILE "PageParser/tests/paragraph.md"
     struct string_view contents = read_entire_file(TEST_FILE);
     if (contents.size == 0) {
         fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
         exit(0);
     }
 
-    global_arena = arena_init(MEGA(10));
+    usize total_arena_size = KILO(10);
+    usize  tree_arena_size = KILO(5);
+    global_arena       = arena_init(total_arena_size);
+    tree_arena.bytes   = global_arena.bytes;
+    tree_arena.size    = tree_arena_size; 
+    vector_arena.bytes = global_arena.bytes + tree_arena_size;
+    vector_arena.size  = global_arena.size  - tree_arena_size; 
 
     struct markdown_parser parser = {
         .contents  = contents.data, 
