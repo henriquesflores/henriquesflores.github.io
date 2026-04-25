@@ -28,8 +28,11 @@ internal struct string_view sv(char *s)
 
 internal void free_sv(struct string_view *c)
 {
-    free(c->data);
     c->size = 0;
+    if (c->data) {
+        free(c->data);
+        c->data = 0;
+    }
 }
 
 
@@ -112,6 +115,15 @@ internal struct memory_arena arena_init(u64 size)
         exit(1);
     }
     return (struct memory_arena) {size, bytes};
+}
+
+internal void free_arena(struct memory_arena *a)
+{
+    a->size = 0;
+    if (a->bytes) {
+        free(a->bytes);
+        a->bytes = 0;
+    }
 }
 
 
@@ -466,7 +478,7 @@ int main(int argc, char **argv)
     tree_arena.bytes   = global_arena.bytes;
     tree_arena.size    = tree_arena_size; 
     vector_arena.bytes = global_arena.bytes + tree_arena_size;
-    vector_arena.size  = global_arena.size  - tree_arena_size; 
+    vector_arena.size  = global_arena.size  - tree_arena_size + 1; 
 
     struct markdown_parser parser = {
         .contents  = contents.data, 
@@ -481,6 +493,9 @@ int main(int argc, char **argv)
         parser.has_error = !add_node(&doc, alloc_markdown_node(t));
     } while (is_parsing(parser));
 
+    // TODO (Henrique): Because of the way I'm doing the string_view allocations 
+    // This is a double free problem.  
+    free_arena(&global_arena);
     free_sv(&contents);
     return 0;
 }
