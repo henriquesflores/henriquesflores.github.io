@@ -1,96 +1,85 @@
 #include <stdio.h> 
 #include <stdlib.h>
 #include <ctype.h>
-#include <windows.h>
 
 #include "types.h"
 
 
-struct file_buffer {
-    u8 *buffer; 
-    u64 size; 
+struct string_view {
+    usize size;
+    u8 *data;
 };
 
 
-void free_buffer(struct file_buffer *c)
+void free_sv(struct string_view *c)
 {
-    free(c->buffer);
-    c->buffer = 0;
+    free(c->data);
+    c->data = 0;
     c->size = 0;
 }
 
 
-internal struct file_buffer 
+internal struct string_view 
 read_entire_file(u8 *filename) 
 {
     // TODO (Henrique): Move later to a way where text can be streamed in blocks
     // instead of loading the entire file into memory;
     FILE *f = 0; 
-    struct file_buffer result = {0};
-    if ((f = fopen(filename, "rb")) == 0) 
-    {
+    struct string_view result = {0};
+    if ((f = fopen(filename, "rb")) == 0) {
         fprintf(stderr, "[ERROR] Could not open file: %s\n", filename); 
         return result;
     } 
     
-    if (fseek(f, 0, SEEK_END) != 0)
-    {
+    if (fseek(f, 0, SEEK_END) != 0) {
         fprintf(stderr, "[ERROR] Could not seek to end of file\n");
         goto cleanup;
     };
     
     i64 file_size = 0; 
-    if ((file_size = ftell(f)) < 0)
-    {
+    if ((file_size = ftell(f)) < 0) {
         fprintf(stderr, "[ERRRO] Could not calculate size from file pointer with ftell\n");
         goto cleanup;
     }
     
-    if (fseek(f, 0, SEEK_SET) != 0) 
-    {
+    if (fseek(f, 0, SEEK_SET) != 0) {
         fprintf(stderr, "[ERROR] Could not seek to start of file\n");
         goto cleanup;
     }
     
-    result.buffer = (char *)malloc(file_size + 1);
-    if (result.buffer == 0)
-    {
+    result.data = (u8 *)malloc(file_size + 1);
+    if (result.data == 0) {
         fprintf(stderr, "[ERROR] Memory allocation failed\n");
         goto cleanup;
     }
 
-    u64 bytes_read = fread(result.buffer, sizeof(result.buffer[0]), file_size, f);
-    if (bytes_read == CAST(u64, file_size))
-    {
-        result.buffer[file_size] = '\0'; 
+    u64 bytes_read = fread(result.data, sizeof(result.data[0]), file_size, f);
+    if (bytes_read == CAST(u64, file_size)) {
+        result.data[file_size] = '\0'; 
         result.size = file_size;
         goto exit;
     } 
-    else 
-    {
-        if (feof(f)) 
-        {
+    else {
+        if (feof(f)) {
             fprintf(stderr, "[ERROR] Unexpected end of file\n");
         } 
-        else if (ferror(f)) 
-        {
+        else if (ferror(f)) {
             fprintf(stderr, "[ERROR] Error reading file\n");
         } 
-        else 
-        {
+        else {
             fprintf(stderr, "[ERROR] Unknown error reading file\n");
         }
         goto cleanup;
     }
 
 cleanup:
+    if (result.data)
+        free_sv(&result);
+
+exit:
     if (f)
         fclose(f);
 
-    if (result.buffer)
-        free_buffer(&result);
-
-exit:
     return result;
 }
 
@@ -127,12 +116,6 @@ struct markdown_parser {
     b32 has_error;
     usize length;
     usize cursor; 
-};
-
-
-struct string_view {
-    usize size;
-    u8 *data;
 };
 
 
@@ -209,7 +192,7 @@ internal u8 get(struct markdown_parser *p)
 }
 
 
-internal u8 *get_pointer(struct markdown_parser *p) 
+internal u8 *at(struct markdown_parser *p) 
 {
     return p->contents + p->cursor;
 }
@@ -229,7 +212,11 @@ internal u64 skip_while(
     while(is_in_bounds(p) && predicate(get(p))) 
         p->cursor = p->cursor + 1;
     usize end = p->cursor;
-    return end - start; 
+
+    i64 result = end - start; 
+    if (result > 0) 
+        return CAST(u64, result);
+    return 0;
 }
 
 
@@ -239,7 +226,7 @@ internal struct string_view extract_while(
 ) {
     struct string_view result = {0};
     u64 _ = skip_while(p, is_space);
-    result.data = get_pointer(p);
+    result.data = at(p);
     result.size = skip_while(p, predicate);
     return result;
 }
@@ -255,8 +242,9 @@ struct parser_snapshot {
 internal 
 struct parser_snapshot get_snapshot(struct markdown_parser *p)
 {
-    u8 letter = get(p);
-    u8 next_letter = cursor_in_bounds(p, p->cursor + 1) ? p->contents[p->cursor + 1] : 0;
+    usize next     = p->cursor + 1;
+    u8 letter      = get(p);
+    u8 next_letter = cursor_in_bounds(p, next) ? p->contents[next] : 0;
     struct parser_snapshot result = {
         .letter      = letter, 
         .next_letter = next_letter, 
@@ -325,9 +313,9 @@ struct markdown_token parse_token(struct markdown_parser *parser)
 //                result.kind = TOKEN_NUMBER;
             } break;
             default: {
-                struct string_view word = extract_while(parser, not_space);
+                struct string_view line = extract_while(parser, not_space);
                 result.kind = TOKEN_WORD;
-                result.item = word;
+                result.item = line;
             } break;
         }
     }
@@ -353,8 +341,7 @@ struct memory_arena arena_init(u64 size)
 }
 
 
-internal
-void *_pushArenaImpl(struct memory_arena *a, usize size)
+internal void *_pushArenaImpl(struct memory_arena *a, usize size)
 {
     i64 remaining = a->size - size;
     if (remaining <= 0) 
@@ -405,7 +392,7 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_node *n)
 int main(int argc, char **argv) 
 {
 #define TEST_FILE "posts/about.md"
-    struct file_buffer contents = read_entire_file(TEST_FILE);
+    struct string_view contents = read_entire_file(TEST_FILE);
     if (contents.size == 0) {
         fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
         exit(0);
@@ -414,7 +401,7 @@ int main(int argc, char **argv)
     global_arena = arena_init(MEGA(10));
 
     struct markdown_parser parser = {
-        .contents  = contents.buffer, 
+        .contents  = contents.data, 
         .has_error = 0,
         .length    = contents.size, 
         .cursor    = 0
@@ -426,6 +413,6 @@ int main(int argc, char **argv)
         parser.has_error = !add_node(&doc, alloc_markdown_node(t));
     } while (is_parsing(parser));
 
-    free_buffer(&contents);
+    free_sv(&contents);
     return 0;
 }
