@@ -4,7 +4,6 @@
 #include <ctype.h>
 
 #include "types.h"
-#define DEFAULT_ARRAY_SIZE 128
 
 
 struct string_view {
@@ -19,23 +18,89 @@ internal struct string_view sv(char *s)
 }
 
 
-internal void free_sv(struct string_view *c)
+struct memory_arena {
+    u64 used;
+    u64 capacity;
+    u8 *bytes; 
+};
+
+
+internal struct memory_arena arena_init(u64 size)
 {
-    c->size = 0;
-    if (c->data) {
-        free(c->data);
-        c->data = 0;
+    u8 *bytes = malloc(size);
+    if (!bytes) {
+        fprintf(stderr, "[ERROR]: Arena failed to allocate. There is no memory to parse this markdown\n");
+        exit(1);
+    }
+    return (struct memory_arena) {0, size, bytes};
+}
+
+
+internal void free_arena(struct memory_arena *a)
+{
+    if (a->bytes) {
+        free(a->bytes);
+        a->used  = 0;
+        a->bytes = 0;
+        a->capacity = 0;
     }
 }
 
 
-internal 
-struct string_view read_entire_file(char *filename) 
+global_variable struct memory_arena global_arena;
+internal void *_pushStructArenaImpl(struct memory_arena *a, usize size)
+{
+    if (a->used + size <= a->capacity) {
+        void *address = a->bytes + a->used;
+        a->used += size;
+        return address;
+    }
+    fprintf(stderr, "[ERROR]: Buffer allocation exceeds arena capacity\n");
+    return 0;
+}
+#define PUSH_STRUCT(arena, type) _pushStructArenaImpl(&(arena), sizeof(type))
+
+
+internal void *_pushArenaArrayImpl(struct memory_arena *a, usize struct_size, usize array_size)
+{
+    usize total_size = struct_size * array_size;
+    return _pushStructArenaImpl(a, total_size);
+}
+#define PUSH_ARRAY(arena, type, size) _pushArenaArrayImpl(&(arena), sizeof(type), size)
+
+
+struct strbuffer {
+    u64 size; 
+    u8 *buffer;
+};
+
+
+internal struct strbuffer alloc_buffer(struct string_view s) 
+{
+    u8 *buffer; 
+    if ((buffer = PUSH_ARRAY(global_arena, u8, s.size)))
+        memcpy(buffer, s.data, s.size);
+    struct strbuffer result = {s.size, buffer};
+    return result;
+}
+
+
+internal void free_strbuffer(struct strbuffer *c)
+{
+    if (c->buffer) {
+        free(c->buffer);
+        c->buffer = 0;
+        c->size = 0;
+    }
+}
+
+
+internal struct strbuffer read_entire_file(char *filename) 
 {
     // TODO (Henrique): Move later to a way where text can be streamed in blocks
     // instead of loading the entire file into memory;
     FILE *f = 0; 
-    struct string_view result = {0};
+    struct strbuffer result = {0};
     if ((f = fopen(filename, "rb")) == 0) {
         fprintf(stderr, "[ERROR] Could not open file: %s\n", filename); 
         return result;
@@ -57,15 +122,15 @@ struct string_view read_entire_file(char *filename)
         goto cleanup;
     }
     
-    result.data = (u8 *)malloc(file_size + 1);
-    if (result.data == 0) {
+    result.buffer = (u8 *)malloc(file_size + 1);
+    if (result.buffer == 0) {
         fprintf(stderr, "[ERROR] Memory allocation failed\n");
         goto cleanup;
     }
 
-    u64 bytes_read = fread(result.data, sizeof(result.data[0]), file_size, f);
+    u64 bytes_read = fread(result.buffer, sizeof(result.buffer[0]), file_size, f);
     if (bytes_read == CAST(u64, file_size)) {
-        result.data[file_size] = '\0'; 
+        result.buffer[file_size] = 0; 
         result.size = file_size;
         goto exit;
     } 
@@ -83,8 +148,7 @@ struct string_view read_entire_file(char *filename)
     }
 
 cleanup:
-    if (result.data)
-        free_sv(&result);
+    free_strbuffer(&result);
 
 exit:
     if (f)
@@ -93,52 +157,6 @@ exit:
     return result;
 }
 
-
-struct memory_arena {
-    u64 size;
-    u8 *bytes; 
-};
-
-
-internal struct memory_arena arena_init(u64 size)
-{
-    u8 *bytes = malloc(size);
-    if (!bytes) {
-        fprintf(stderr, "[ERROR]: Arena failed to allocate. There is no memory to parse this markdown\n");
-        exit(1);
-    }
-    return (struct memory_arena) {size, bytes};
-}
-
-internal void free_arena(struct memory_arena *a)
-{
-    a->size = 0;
-    if (a->bytes) {
-        free(a->bytes);
-        a->bytes = 0;
-    }
-}
-
-
-global_variable struct memory_arena global_arena;
-internal void *_pushArenaImpl(struct memory_arena *a, usize size)
-{
-    if (a->size <= size) 
-        return 0;
-    
-    void *address = a->bytes + a->size;
-    a->size += size;
-    return address;
-}
-#define PUSH(arena, type) _pushArenaImpl(&(arena), sizeof(type))
-
-
-internal void *_pushArenaArrayImpl(struct memory_arena *a, usize struct_size, usize array_size)
-{
-    usize total_size = struct_size * array_size;
-    return _pushArenaImpl(a, total_size);
-}
-#define PUSH_ARRAY(arena, type, size) _pushArenaArrayImpl(&(arena), sizeof(type), size)
 
 
 enum token_kind {
@@ -174,7 +192,7 @@ struct markdown_parser {
 
 struct markdown_token {
     enum token_kind kind;
-    struct string_view item;
+    struct strbuffer item;
 };
 
 
@@ -340,9 +358,7 @@ internal b32 is_paragraph(struct string_view s)
 internal 
 struct markdown_token parse_token(struct markdown_parser *parser)
 {
-    struct markdown_token result = {
-        TOKEN_UNKNOWN, sv("")
-    }; 
+    struct markdown_token result = {TOKEN_UNKNOWN, 0}; 
 
     skip_while(parser, is_space);
     if (is_in_bounds(parser)) {
@@ -356,7 +372,7 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                 parser->has_error = !is_in_bounds(parser);
                 
                 struct string_view title = extract_while(parser, not_new_line);
-                result.item = title;
+                result.item = alloc_buffer(title);
                 skip_while(parser, is_space);
             } break;
             case '(': {
@@ -398,7 +414,7 @@ struct markdown_token parse_token(struct markdown_parser *parser)
             default: {
                 result.kind = TOKEN_PARAGRAPH;
                 struct string_view paragraph = extract_while(parser, is_paragraph);
-                result.item = paragraph;
+                result.item = alloc_buffer(paragraph);
             } break;
         }
     }
@@ -408,12 +424,13 @@ struct markdown_token parse_token(struct markdown_parser *parser)
 
 internal struct markdown_node *alloc_markdown_node(struct markdown_token t)
 {
-    assert(global_arena.size != 0);
-    struct markdown_node *n = PUSH(global_arena, );
+    assert(global_arena.capacity != 0);
+    struct markdown_node *n = PUSH_STRUCT(global_arena, struct markdown_node);
     if (!n) {
         fprintf(stderr, "[ERROR]: Failed to allocate markdown node. Entire process is killed.\n");
         exit(1);
     }
+
     n->token = t;
     n->children = 0;
     return n;
@@ -424,7 +441,7 @@ internal struct markdown_tree alloc_markdown_tree()
 {
     struct markdown_tree result = {0};
     result.head = alloc_markdown_node(
-        (struct markdown_token) {TOKEN_HEAD, sv("Head of markdown tree")}
+        (struct markdown_token) {TOKEN_HEAD, alloc_buffer(sv("Head of markdown tree"))}
     );
     result.current = result.head;
     return result;
@@ -441,8 +458,8 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_node *n)
 
 int main(int argc, char **argv) 
 {
-#define TEST_FILE "PageParser/tests/paragraph.md"
-    struct string_view contents = read_entire_file(TEST_FILE);
+#define TEST_FILE "PageParser/tests/empty_title_with_paragraph.md"
+    struct strbuffer contents = read_entire_file(TEST_FILE);
     if (contents.size == 0) {
         fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
         exit(0);
@@ -451,7 +468,7 @@ int main(int argc, char **argv)
     global_arena = arena_init(KILO(10));
 
     struct markdown_parser parser = {
-        .contents  = contents.data, 
+        .contents  = contents.buffer, 
         .has_error = 0,
         .length    = contents.size, 
         .cursor    = 0
@@ -463,9 +480,7 @@ int main(int argc, char **argv)
         parser.has_error = !add_node(&doc, alloc_markdown_node(t));
     } while (is_parsing(parser));
 
-    // TODO (Henrique): Because of the way I'm doing the string_view allocations 
-    // This is a double free problem.  
     free_arena(&global_arena);
-    free_sv(&contents);
+    free_strbuffer(&contents);
     return 0;
 }
