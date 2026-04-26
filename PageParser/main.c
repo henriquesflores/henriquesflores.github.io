@@ -13,13 +13,6 @@ struct string_view {
 };
 
 
-struct sv_vector {
-    usize size; 
-    usize capacity; 
-    struct string_view *data;
-}
-
-
 internal struct string_view sv(char *s) 
 {
     return (struct string_view) {strlen(s), s};
@@ -150,31 +143,6 @@ internal void *_pushArenaArrayImpl(struct memory_arena *a, usize struct_size, us
 #define PUSH_ARRAY(arena, type, size) _pushArenaArrayImpl(&(arena), sizeof(type), size)
 
 
-internal struct sv_vector alloc_string_view(usize size)
-{
-    struct string_view *s = PUSH_ARRAY(vector_arena, struct string_view, size);
-    if (!s) {
-        fprintf(stderr, "[ERROR]: Failed to allocate memory for string view array\n");
-        exit(1);
-    }
-
-    struct sv_vector result = {0, size, s};
-    return result;
-}
-
-
-internal b32 push_string_view(struct sv_vector *s, struct string_view v)
-{
-    if (s->size >= s->capacity) {
-        return 0;
-    }
-
-    s->data[s->size] = v;
-    s->size = s->size + 1;
-    return 1;
-}
-
-
 enum token_kind {
     TOKEN_UNKNOWN = 0,
     TOKEN_HEAD,
@@ -209,10 +177,7 @@ struct markdown_parser {
 
 struct markdown_token {
     enum token_kind kind;
-    union {
-        struct string_view item;
-        struct sv_vector array;
-    };
+    struct string_view item;
 };
 
 
@@ -228,33 +193,56 @@ struct markdown_tree {
 };
 
 
-internal b32 is_space(u8 c)
-{
-    return (c == ' ' || c == '\t' || c == '\n' || c == '\r');
+internal b32 sv_isequal(
+    struct string_view s,
+    char *cstr
+) {
+    usize cs = strlen(cstr);
+    return (s.size >= cs && strncmp(s.data, cstr, cs) == 0);
 }
 
 
-internal b32 not_space(u8 c)
-{
-    return !is_space(c);
+internal b32 sv_isequal_any(
+    struct string_view s,
+    char **cstr_array, 
+    usize array_size
+) {
+    for (int i = 0; i < array_size; i++) 
+        if (sv_isequal(s, cstr_array[i]))
+            return 1;
+    return 0;
 }
 
 
-internal b32 is_new_line(u8 c)
+internal b32 is_space(struct string_view s)
 {
-    return (c == '\n') || (c == '\r');
+    char *c[] = {" ", "\n", "\r\n"};
+    return sv_isequal_any(s, c, ARRAY_LEN(c));
 }
 
 
-internal b32 not_new_line(u8 c)
+internal b32 not_space(struct string_view s)
 {
-    return !is_new_line(c);
+    return !is_space(s);
 }
 
 
-internal b32 is_hash(u8 c) 
+internal b32 is_new_line(struct string_view s)
 {
-    return c == '#';
+    char *c[] = {"\n", "\r\n"};
+    return sv_isequal_any(s, c, ARRAY_LEN(c));
+}
+
+
+internal b32 not_new_line(struct string_view s)
+{
+    return !is_new_line(s);
+}
+
+
+internal b32 is_hash(struct string_view s) 
+{
+    return sv_isequal(s, "#");
 }
 
 
@@ -283,6 +271,12 @@ internal u8 *at(struct markdown_parser *p)
 }
 
 
+internal struct string_view as_sv(struct markdown_parser *p)
+{
+    return (struct string_view) {p->length - p->cursor, at(p)};
+}
+
+
 internal b32 is_parsing(struct markdown_parser p) 
 {
     return is_in_bounds(&p) && (!p.has_error);
@@ -291,10 +285,10 @@ internal b32 is_parsing(struct markdown_parser p)
 
 internal u64 skip_while(
     struct markdown_parser *p, 
-    b32 (*predicate)(u8 c)
+    b32 (*predicate)(struct string_view)
 ) {
     usize start = p->cursor; 
-    while(is_in_bounds(p) && predicate(get(p))) 
+    while(is_in_bounds(p) && predicate(as_sv(p))) 
         p->cursor = p->cursor + 1;
     usize end = p->cursor;
 
@@ -307,10 +301,10 @@ internal u64 skip_while(
 
 internal struct string_view extract_while(
     struct markdown_parser *p, 
-    b32 (*predicate)(u8 c)
+    b32 (*predicate)(struct string_view)
 ) {
-    struct string_view result = {0};
     u64 _ = skip_while(p, is_space);
+    struct string_view result = {0};
     result.data = at(p);
     result.size = skip_while(p, predicate);
     return result;
@@ -328,10 +322,9 @@ internal
 struct parser_snapshot get_snapshot(struct markdown_parser *p)
 {
     usize next     = p->cursor + 1;
-    u8 letter      = get(p);
     u8 next_letter = cursor_in_bounds(p, next) ? p->contents[next] : 0;
     struct parser_snapshot result = {
-        .letter      = letter, 
+        .letter      = get(p), 
         .next_letter = next_letter, 
         .cursor      = p->cursor
     };
@@ -339,16 +332,11 @@ struct parser_snapshot get_snapshot(struct markdown_parser *p)
 }
 
 
-internal b32 is_paragraph(struct markdown_parser *p)
+internal b32 is_paragraph(struct string_view s)
 {
-    if (is_in_bounds(p)) {
-        b32      is_equation = strncmp(at(p),  "$$",  strlen("$$")) == 0;
-        b32    is_subsection = strncmp(at(p),  "##",  strlen("##")) == 0;
-        b32 is_subsubsection = strncmp(at(p), "###", strlen("###")) == 0;
-        b32 result = is_equation || is_subsection || is_subsubsection;
-        return !result;
-    }
-    return 0;
+    char *c[] = {"$$", "##", "###"};
+    b32 result = sv_isequal_any(s, c, ARRAY_LEN(c));
+    return !result;
 }
 
 
@@ -412,17 +400,8 @@ struct markdown_token parse_token(struct markdown_parser *parser)
             } break;
             default: {
                 result.kind = TOKEN_PARAGRAPH;
-                struct sv_vector s = alloc_string_view(DEFAULT_ARRAY_SIZE);
-                do {
-                    struct string_view word = extract_while(parser, not_space);
-                    if (push_string_view(&s, word)) {
-                        skip_while(parser, is_space);
-                    } else {
-                        parser->has_error = 1;
-                        break;
-                    }
-                } while (is_paragraph(parser));
-                result.array = s;
+                struct string_view paragraph = extract_while(parser, is_paragraph);
+                result.item = paragraph;
             } break;
         }
     }
@@ -474,11 +453,11 @@ int main(int argc, char **argv)
 
     usize total_arena_size = KILO(10);
     usize  tree_arena_size = KILO(5);
-    global_arena       = arena_init(total_arena_size);
-    tree_arena.bytes   = global_arena.bytes;
-    tree_arena.size    = tree_arena_size; 
-    vector_arena.bytes = global_arena.bytes + tree_arena_size;
-    vector_arena.size  = global_arena.size  - tree_arena_size + 1; 
+    global_arena           = arena_init(total_arena_size);
+    tree_arena.bytes       = global_arena.bytes;
+    tree_arena.size        = tree_arena_size; 
+    vector_arena.bytes     = global_arena.bytes + tree_arena_size;
+    vector_arena.size      = global_arena.size  - tree_arena_size + 1; 
 
     struct markdown_parser parser = {
         .contents  = contents.data, 
