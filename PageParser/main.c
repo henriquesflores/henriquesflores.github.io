@@ -255,6 +255,23 @@ internal b32 not_new_line(struct string_view s)
 }
 
 
+internal struct string_view svtrim(struct string_view s)
+{
+    usize i = 0;
+    while (i < s.size && s.data[i] == ' ')
+        i++;
+    
+    usize j = 1; 
+    while (j < s.size && s.data[s.size - 1 - j] == ' ')
+        j++;
+    
+    usize result_size  = (i + j > s.size) ? 0 : s.size - (i + j);
+    u8 *result_pointer = (i + j > s.size) ? 0 : s.data + i;
+    struct string_view result = {result_size, result_pointer};
+    return result;
+}
+
+
 internal b32 is_hash(struct string_view s) 
 {
     return sv_isequal(s, "#");
@@ -318,11 +335,10 @@ internal struct string_view extract_while(
     struct markdown_parser *p, 
     b32 (*predicate)(struct string_view)
 ) {
-    u64 _ = skip_while(p, is_space);
     struct string_view result = {0};
     result.data = at(p);
     result.size = skip_while(p, predicate);
-    return result;
+    return svtrim(result);
 }
 
 
@@ -368,10 +384,12 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                 result.kind = p.next_letter == '#' ? TOKEN_SECTION : TOKEN_TITLE; 
 
                 skip_while(parser, is_hash);
-                skip_while(parser, is_space);
-                parser->has_error = !is_in_bounds(parser);
-                
                 struct string_view title = extract_while(parser, not_new_line);
+                if (title.size == 0) {
+                    parser->has_error = 1;
+                    return result;
+                }
+
                 result.item = alloc_buffer(title);
                 skip_while(parser, is_space);
             } break;
@@ -477,7 +495,8 @@ int main(int argc, char **argv)
     struct markdown_tree doc = alloc_markdown_tree();
     do {
         struct markdown_token t = parse_token(&parser);
-        parser.has_error = !add_node(&doc, alloc_markdown_node(t));
+        if (!parser.has_error)
+            parser.has_error = !add_node(&doc, alloc_markdown_node(t));
     } while (is_parsing(parser));
 
     free_arena(&global_arena);
