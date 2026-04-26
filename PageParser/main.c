@@ -121,8 +121,6 @@ internal void free_arena(struct memory_arena *a)
 
 
 global_variable struct memory_arena global_arena;
-global_variable struct memory_arena tree_arena;
-global_variable struct memory_arena vector_arena;
 internal void *_pushArenaImpl(struct memory_arena *a, usize size)
 {
     if (a->size <= size) 
@@ -172,7 +170,6 @@ struct markdown_parser {
     usize length;
     usize cursor; 
 };
-
 
 
 struct markdown_token {
@@ -411,8 +408,8 @@ struct markdown_token parse_token(struct markdown_parser *parser)
 
 internal struct markdown_node *alloc_markdown_node(struct markdown_token t)
 {
-    assert(tree_arena.size != 0);
-    struct markdown_node *n = PUSH(tree_arena, struct markdown_node);
+    assert(global_arena.size != 0);
+    struct markdown_node *n = PUSH(global_arena, );
     if (!n) {
         fprintf(stderr, "[ERROR]: Failed to allocate markdown node. Entire process is killed.\n");
         exit(1);
@@ -451,13 +448,7 @@ int main(int argc, char **argv)
         exit(0);
     }
 
-    usize total_arena_size = KILO(10);
-    usize  tree_arena_size = KILO(5);
-    global_arena           = arena_init(total_arena_size);
-    tree_arena.bytes       = global_arena.bytes;
-    tree_arena.size        = tree_arena_size; 
-    vector_arena.bytes     = global_arena.bytes + tree_arena_size;
-    vector_arena.size      = global_arena.size  - tree_arena_size + 1; 
+    global_arena = arena_init(KILO(10));
 
     struct markdown_parser parser = {
         .contents  = contents.data, 
