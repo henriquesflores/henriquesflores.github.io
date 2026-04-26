@@ -50,7 +50,7 @@ internal void free_arena(struct memory_arena *a)
 global_variable struct memory_arena global_arena;
 internal void *_pushStructArenaImpl(struct memory_arena *a, usize size)
 {
-    if (a->used + size <= a->capacity) {
+    if (size && a->used + size <= a->capacity) {
         void *address = a->bytes + a->used;
         a->used += size;
         return address;
@@ -77,7 +77,7 @@ struct strbuffer {
 
 internal struct strbuffer alloc_buffer(struct string_view s) 
 {
-    u8 *buffer; 
+    u8 *buffer = 0; 
     if ((buffer = PUSH_ARRAY(global_arena, u8, s.size)))
         memcpy(buffer, s.data, s.size);
     struct strbuffer result = {s.size, buffer};
@@ -382,14 +382,8 @@ struct markdown_token parse_token(struct markdown_parser *parser)
         switch (p.letter) {
             case '#': {
                 result.kind = p.next_letter == '#' ? TOKEN_SECTION : TOKEN_TITLE; 
-
                 skip_while(parser, is_hash);
                 struct string_view title = extract_while(parser, not_new_line);
-                if (title.size == 0) {
-                    parser->has_error = 1;
-                    return result;
-                }
-
                 result.item = alloc_buffer(title);
                 skip_while(parser, is_space);
             } break;
@@ -476,7 +470,7 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_node *n)
 
 int main(int argc, char **argv) 
 {
-#define TEST_FILE "PageParser/tests/empty_title_with_paragraph.md"
+#define TEST_FILE "PageParser/tests/empty_title.md"
     struct strbuffer contents = read_entire_file(TEST_FILE);
     if (contents.size == 0) {
         fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
