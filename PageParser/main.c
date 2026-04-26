@@ -158,7 +158,6 @@ exit:
 }
 
 
-
 enum token_kind {
     TOKEN_UNKNOWN = 0,
     TOKEN_HEAD,
@@ -209,43 +208,65 @@ struct markdown_tree {
 
 
 internal b32 sv_isequal(
-    struct string_view s,
-    char *cstr
-) {
-    usize cs = strlen(cstr);
-    return (s.size >= cs && strncmp(s.data, cstr, cs) == 0);
+    struct string_view s, 
+    struct string_view w
+) { 
+    return (s.size == w.size && strncmp(s.data, w.data, s.size) == 0);
 }
 
 
-internal b32 sv_isequal_any(
+internal b32 sv_startswith(
+    struct string_view s,
+    struct string_view c
+) {
+    return (s.size >= c.size && strncmp(s.data, c.data, c.size) == 0);
+}
+
+
+internal b32 sv_startswith_any(
     struct string_view s,
     char **cstr_array, 
     usize array_size
 ) {
     for (int i = 0; i < array_size; i++) 
-        if (sv_isequal(s, cstr_array[i]))
+        if (sv_startswith(s, sv(cstr_array[i])))
             return 1;
     return 0;
 }
 
 
-internal b32 is_space(struct string_view s)
-{
-    char *c[] = {" ", "\n", "\r\n"};
-    return sv_isequal_any(s, c, ARRAY_LEN(c));
+internal b32 sv_endswith_any(
+    struct string_view s, 
+    char **cstr_array, 
+    usize array_size
+) {
+    for (int i = 0; i < array_size; i++) {
+        char  *c = cstr_array[i];
+        usize cs = strlen(c);
+        if (strncmp(s.data + s.size - cs, c, cs) == 0)
+            return 1;
+    }
+    return 0;
 }
 
 
-internal b32 not_space(struct string_view s)
+internal b32 is_whitespace(struct string_view s)
 {
-    return !is_space(s);
+    char *c[] = {" ", "\n", "\r\n"};
+    return sv_startswith_any(s, c, ARRAY_LEN(c));
+}
+
+
+internal b32 not_whitespace(struct string_view s)
+{
+    return !is_whitespace(s);
 }
 
 
 internal b32 is_new_line(struct string_view s)
 {
     char *c[] = {"\n", "\r\n"};
-    return sv_isequal_any(s, c, ARRAY_LEN(c));
+    return sv_startswith_any(s, c, ARRAY_LEN(c));
 }
 
 
@@ -255,14 +276,16 @@ internal b32 not_new_line(struct string_view s)
 }
 
 
-internal struct string_view svtrim(struct string_view s)
-{
+internal struct string_view svtrim_while(
+    struct string_view s, 
+    b32 (*predicate)(u8)
+) {
     usize i = 0;
-    while (i < s.size && s.data[i] == ' ')
+    while (i < s.size && predicate(s.data[i]))
         i++;
-    
-    usize j = 1; 
-    while (j < s.size && s.data[s.size - 1 - j] == ' ')
+
+    usize j = 0; 
+    while (j < s.size && predicate(s.data[s.size - 1 - j]))
         j++;
     
     usize result_size  = (i + j > s.size) ? 0 : s.size - (i + j);
@@ -272,9 +295,21 @@ internal struct string_view svtrim(struct string_view s)
 }
 
 
+internal struct string_view svtrim_whitespace(struct string_view s)
+{
+    return svtrim_while(s, isspace);
+}
+
+
 internal b32 is_hash(struct string_view s) 
 {
-    return sv_isequal(s, "#");
+    return sv_startswith(s, sv("#"));
+}
+
+
+internal b32 is_dollar(struct string_view s)
+{
+    return sv_startswith(s, sv("$"));
 }
 
 
@@ -303,7 +338,7 @@ internal u8 *at(struct markdown_parser *p)
 }
 
 
-internal struct string_view as_sv(struct markdown_parser *p)
+internal struct string_view asv(struct markdown_parser *p)
 {
     return (struct string_view) {p->length - p->cursor, at(p)};
 }
@@ -320,7 +355,7 @@ internal u64 skip_while(
     b32 (*predicate)(struct string_view)
 ) {
     usize start = p->cursor; 
-    while(is_in_bounds(p) && predicate(as_sv(p))) 
+    while(is_in_bounds(p) && predicate(asv(p))) 
         p->cursor = p->cursor + 1;
     usize end = p->cursor;
 
@@ -338,7 +373,7 @@ internal struct string_view extract_while(
     struct string_view result = {0};
     result.data = at(p);
     result.size = skip_while(p, predicate);
-    return svtrim(result);
+    return svtrim_whitespace(result);
 }
 
 
@@ -366,8 +401,14 @@ struct parser_snapshot get_snapshot(struct markdown_parser *p)
 internal b32 is_paragraph(struct string_view s)
 {
     char *c[] = {"$$", "##", "###"};
-    b32 result = sv_isequal_any(s, c, ARRAY_LEN(c));
+    b32 result = sv_startswith_any(s, c, ARRAY_LEN(c));
     return !result;
+}
+
+
+internal b32 is_equation(struct string_view s)
+{
+    return !sv_startswith(s, sv("$$"));
 }
 
 
@@ -376,7 +417,7 @@ struct markdown_token parse_token(struct markdown_parser *parser)
 {
     struct markdown_token result = {TOKEN_UNKNOWN, 0}; 
 
-    skip_while(parser, is_space);
+    skip_while(parser, is_whitespace);
     if (is_in_bounds(parser)) {
         struct parser_snapshot p = get_snapshot(parser);
         switch (p.letter) {
@@ -385,7 +426,7 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                 skip_while(parser, is_hash);
                 struct string_view title = extract_while(parser, not_new_line);
                 result.item = alloc_buffer(title);
-                skip_while(parser, is_space);
+                skip_while(parser, is_whitespace);
             } break;
             case '(': {
                 result.kind = TOKEN_OPEN_PARENTHESIS;
@@ -406,7 +447,12 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                 result.kind = TOKEN_CLOSE_BRACE;
             } break;
             case '$': {
-                result.kind = TOKEN_INLINE_EQUATION;
+                result.kind = p.next_letter == '$' ? TOKEN_EQUATION : TOKEN_INLINE_EQUATION;
+                skip_while(parser, is_dollar);
+                struct string_view equation = extract_while(parser, is_equation);
+                result.item = alloc_buffer(equation);
+                skip_while(parser, is_dollar);
+                skip_while(parser, is_whitespace);
             } break;
             case '-': {
                 // This is an interesting case. I can be a negative number of some bs;
@@ -470,14 +516,14 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_node *n)
 
 int main(int argc, char **argv) 
 {
-#define TEST_FILE "PageParser/tests/empty_title.md"
+#define TEST_FILE "PageParser/tests/paragraph.md"
     struct strbuffer contents = read_entire_file(TEST_FILE);
     if (contents.size == 0) {
         fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
         exit(0);
     }
 
-    global_arena = arena_init(KILO(10));
+    global_arena = arena_init(MEGA(10));
 
     struct markdown_parser parser = {
         .contents  = contents.buffer, 
