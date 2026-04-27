@@ -278,7 +278,7 @@ internal b32 not_new_line(struct string_view s)
 
 internal struct string_view svtrim_while(
     struct string_view s, 
-    b32 (*predicate)(u8)
+    b32 (*predicate)(int)
 ) {
     usize i = 0;
     while (i < s.size && predicate(s.data[i]))
@@ -430,21 +430,27 @@ struct markdown_token parse_token(struct markdown_parser *parser)
             } break;
             case '(': {
                 result.kind = TOKEN_OPEN_PARENTHESIS;
+                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
             } break;
             case ')': {
                 result.kind = TOKEN_CLOSE_PARENTHESIS;
+                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
             } break;
             case '[': {
                 result.kind = TOKEN_OPEN_BRACKET;
+                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
             } break;
             case ']': {
                 result.kind = TOKEN_CLOSE_BRACKET;
+                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
             } break;
             case '{': {
                 result.kind = TOKEN_OPEN_BRACE;
+                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
             } break;
             case '}': {
                 result.kind = TOKEN_CLOSE_BRACE;
+                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
             } break;
             case '$': {
                 result.kind = p.next_letter == '$' ? TOKEN_EQUATION : TOKEN_INLINE_EQUATION;
@@ -456,7 +462,7 @@ struct markdown_token parse_token(struct markdown_parser *parser)
             } break;
             case '-': {
                 // This is an interesting case. I can be a negative number of some bs;
-            } break;
+            };
             case '0':
             case '1':
             case '2':
@@ -468,6 +474,7 @@ struct markdown_token parse_token(struct markdown_parser *parser)
             case '8':
             case '9': {
 //                result.kind = TOKEN_NUMBER;
+                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
             } break;
             default: {
                 result.kind = TOKEN_PARAGRAPH;
@@ -499,7 +506,7 @@ internal struct markdown_tree alloc_markdown_tree()
 {
     struct markdown_tree result = {0};
     result.head = alloc_markdown_node(
-        (struct markdown_token) {TOKEN_HEAD, alloc_buffer(sv("Head of markdown tree"))}
+        (struct markdown_token) {TOKEN_HEAD, alloc_buffer(sv("Markdown tree"))}
     );
     result.current = result.head;
     return result;
@@ -535,8 +542,7 @@ int main(int argc, char **argv)
     struct markdown_tree doc = alloc_markdown_tree();
     do {
         struct markdown_token t = parse_token(&parser);
-        if (!parser.has_error)
-            parser.has_error = !add_node(&doc, alloc_markdown_node(t));
+        parser.has_error += !add_node(&doc, alloc_markdown_node(t));
     } while (is_parsing(parser));
 
     free_arena(&global_arena);
