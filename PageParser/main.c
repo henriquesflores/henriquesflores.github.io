@@ -55,7 +55,6 @@ internal void *_pushStructArenaImpl(struct memory_arena *a, usize size)
         a->used += size;
         return address;
     }
-    fprintf(stderr, "[ERROR]: Buffer allocation exceeds arena capacity\n");
     return 0;
 }
 #define PUSH_STRUCT(arena, type) _pushStructArenaImpl(&(arena), sizeof(type))
@@ -190,6 +189,7 @@ struct markdown_parser {
 
 
 struct markdown_token {
+    u64 new_line_space;
     enum token_kind kind;
     struct strbuffer item;
 };
@@ -223,6 +223,14 @@ internal b32 sv_startswith(
 }
 
 
+internal b32 sv_endswith(
+    struct string_view s, 
+    struct string_view c
+) {
+    return (s.size >= c.size && strncmp(s.data + s.size - c.size, c.data, c.size) == 0);
+}
+
+
 internal b32 sv_startswith_any(
     struct string_view s,
     char **cstr_array, 
@@ -240,12 +248,9 @@ internal b32 sv_endswith_any(
     char **cstr_array, 
     usize array_size
 ) {
-    for (int i = 0; i < array_size; i++) {
-        char  *c = cstr_array[i];
-        usize cs = strlen(c);
-        if (strncmp(s.data + s.size - cs, c, cs) == 0)
+    for (int i = 0; i < array_size; i++) 
+        if (sv_endswith(s, sv(cstr_array[i])))
             return 1;
-    }
     return 0;
 }
 
@@ -384,8 +389,7 @@ struct parser_snapshot {
 };
 
 
-internal 
-struct parser_snapshot get_snapshot(struct markdown_parser *p)
+internal struct parser_snapshot get_snapshot(struct markdown_parser *p)
 {
     usize next     = p->cursor + 1;
     u8 next_letter = cursor_in_bounds(p, next) ? p->contents[next] : 0;
@@ -415,9 +419,9 @@ internal b32 is_equation(struct string_view s)
 internal 
 struct markdown_token parse_token(struct markdown_parser *parser)
 {
-    struct markdown_token result = {TOKEN_UNKNOWN, 0}; 
+    struct markdown_token result = {0, TOKEN_UNKNOWN, 0}; 
 
-    skip_while(parser, is_whitespace);
+    result.new_line_space = skip_while(parser, is_whitespace);
     if (is_in_bounds(parser)) {
         struct parser_snapshot p = get_snapshot(parser);
         switch (p.letter) {
@@ -426,7 +430,6 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                 skip_while(parser, is_hash);
                 struct string_view title = extract_while(parser, not_new_line);
                 result.item = alloc_buffer(title);
-                skip_while(parser, is_whitespace);
             } break;
             case '(': {
                 result.kind = TOKEN_OPEN_PARENTHESIS;
@@ -458,7 +461,6 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                 struct string_view equation = extract_while(parser, is_equation);
                 result.item = alloc_buffer(equation);
                 skip_while(parser, is_dollar);
-                skip_while(parser, is_whitespace);
             } break;
             case '-': {
                 // This is an interesting case. I can be a negative number of some bs;
@@ -491,13 +493,10 @@ internal struct markdown_node *alloc_markdown_node(struct markdown_token t)
 {
     assert(global_arena.capacity != 0);
     struct markdown_node *n = PUSH_STRUCT(global_arena, struct markdown_node);
-    if (!n) {
-        fprintf(stderr, "[ERROR]: Failed to allocate markdown node. Entire process is killed.\n");
-        exit(1);
+    if (n) {
+        n->token = t;
+        n->children = 0;
     }
-
-    n->token = t;
-    n->children = 0;
     return n;
 }
 
@@ -506,31 +505,35 @@ internal struct markdown_tree alloc_markdown_tree()
 {
     struct markdown_tree result = {0};
     result.head = alloc_markdown_node(
-        (struct markdown_token) {TOKEN_HEAD, alloc_buffer(sv("Markdown tree"))}
+        (struct markdown_token) {0, TOKEN_HEAD, alloc_buffer(sv("Markdown tree"))}
     );
     result.current = result.head;
     return result;
 }
 
 
-internal b32 add_node(struct markdown_tree *t, struct markdown_node *n)
+internal b32 add_node(struct markdown_tree *t, struct markdown_token token)
 {
-    t->current->children = n;
-    t->current = n;
-    return 1;
+    struct markdown_node *n;
+    if ((n = alloc_markdown_node(token))) {
+        t->current->children = n;
+        t->current = n;
+        return 1;
+    };
+    return 0;
 }
 
 
 int main(int argc, char **argv) 
 {
-#define TEST_FILE "PageParser/tests/paragraph.md"
+#define TEST_FILE "PageParser/tests/full_text1.md"
     struct strbuffer contents = read_entire_file(TEST_FILE);
     if (contents.size == 0) {
         fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
         exit(0);
     }
 
-    global_arena = arena_init(MEGA(10));
+    global_arena = arena_init(MEGA(2));
 
     struct markdown_parser parser = {
         .contents  = contents.buffer, 
@@ -542,7 +545,7 @@ int main(int argc, char **argv)
     struct markdown_tree doc = alloc_markdown_tree();
     do {
         struct markdown_token t = parse_token(&parser);
-        parser.has_error += !add_node(&doc, alloc_markdown_node(t));
+        parser.has_error += !add_node(&doc, t); 
     } while (is_parsing(parser));
 
     free_arena(&global_arena);
