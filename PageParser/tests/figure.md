@@ -1,0 +1,1 @@
+![This is some legend you write for your figure](image_url "This is the actual caption for the figure in question")
