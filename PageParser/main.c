@@ -163,7 +163,7 @@ enum token_kind {
     TOKEN_TITLE,
     TOKEN_SECTION,
     TOKEN_SUBSECTION, 
-    TOKEN_NUMBER,
+    TOKEN_LIST_ELEMENT,
     TOKEN_OPEN_BRACKET, 
     TOKEN_CLOSE_BRACKET, 
     TOKEN_OPEN_PARENTHESIS,
@@ -195,12 +195,19 @@ struct markdown_figure {
 };
 
 
+struct markdown_list_element {
+    u64 item_number; 
+    struct strbuffer item;
+};
+
+
 struct markdown_token {
     u64 new_line_space;
     enum token_kind kind;
     union {
         struct strbuffer item;
         struct markdown_figure figure;
+        struct markdown_list_element element;
     };
 };
 
@@ -238,6 +245,23 @@ internal b32 sv_endswith(
     struct string_view c
 ) {
     return (s.size >= c.size && strncmp(s.data + s.size - c.size, c.data, c.size) == 0);
+}
+
+
+
+#define STACK_STRING_SIZE 64
+internal u64 svtoint(struct string_view s)
+{
+    if (STACK_STRING_SIZE + 1 < s.size) {
+        fprintf(stderr, "Ops, there is nothing implemented here yet\n");
+        exit(1);
+    } else { 
+        char c[STACK_STRING_SIZE];
+        memcpy(c, s.data, STACK_STRING_SIZE);
+        c[s.size] = 0;
+        u64 result = atoi(c);
+        return result;
+    }
 }
 
 
@@ -318,6 +342,19 @@ internal is_close_parenthesis(struct string_view s)
 internal not_close_parenthesis(struct string_view s)
 {
     return !is_close_parenthesis(s);
+}
+
+
+internal is_dot(struct string_view s)
+{
+    return sv_startswith(s, sv("."));
+}
+
+
+internal b32 is_numeric(struct string_view s)
+{
+    char *c[] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
+    return sv_startswith_any(s, c, ARRAY_LEN(c));
 }
 
 
@@ -402,12 +439,8 @@ internal u64 skip_while(
     usize start = p->cursor; 
     while(is_in_bounds(p) && predicate(asv(p))) 
         p->cursor = p->cursor + 1;
-    usize end = p->cursor;
-
-    i64 result = end - start; 
-    if (result > 0) 
-        return CAST(u64, result);
-    return 0;
+    usize result = (p->cursor > start) ? p->cursor - start : 0;
+    return CAST(u64, result);
 }
 
 
@@ -531,8 +564,9 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                 }
             } break;
             case '-': {
-                // This is an interesting case. I can be a negative number of some bs;
-            };
+                fprintf(stderr, "[ERROR]: This markdown case is not implemented yet\n");
+                exit(1);
+            } break;
             case '0':
             case '1':
             case '2':
@@ -543,8 +577,21 @@ struct markdown_token parse_token(struct markdown_parser *parser)
             case '7':
             case '8':
             case '9': {
-//                result.kind = TOKEN_NUMBER;
-                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
+                result.kind = TOKEN_LIST_ELEMENT;
+                struct string_view number = extract_while(parser, is_numeric);
+                if (number.size != 0) {
+                    u64 parsed_number = svtoint(number);
+                    if (parsed_number > 0 && skip_while(parser, is_dot) == 1) {
+                        struct string_view item = extract_while(parser, not_new_line);
+                        result.element = (struct markdown_list_element) {parsed_number, alloc_buffer(item)};
+                    } else { 
+                        fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing list element\n");
+                        parser->has_error += 1;
+                    }
+                } else {
+                    fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing list number\n");
+                    parser->has_error += 1;
+                }
             } break;
             default: {
                 result.kind = TOKEN_PARAGRAPH;
@@ -594,7 +641,7 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_token token)
 
 int main(int argc, char **argv) 
 {
-#define TEST_FILE "PageParser/tests/figure.md"
+#define TEST_FILE "PageParser/tests/list.md"
     struct strbuffer contents = read_entire_file(TEST_FILE);
     if (contents.size == 0) {
         fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
