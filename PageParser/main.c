@@ -170,10 +170,10 @@ enum token_kind {
     TOKEN_CLOSE_PARENTHESIS,
     TOKEN_OPEN_BRACE,
     TOKEN_CLOSE_BRACE,
-    TOKEN_EQUAL,
     TOKEN_PARAGRAPH,
     TOKEN_INLINE_EQUATION,
     TOKEN_EQUATION,
+    TOKEN_FIGURE,
     TOKEN_BOLD,
     TOKEN_ITALIC,
     TOKEN_KIND_COUNT,
@@ -188,10 +188,20 @@ struct markdown_parser {
 };
 
 
+struct markdown_figure {
+    struct strbuffer alt_text;
+    struct strbuffer address;
+    struct strbuffer caption;
+};
+
+
 struct markdown_token {
     u64 new_line_space;
     enum token_kind kind;
-    struct strbuffer item;
+    union {
+        struct strbuffer item;
+        struct markdown_figure figure;
+    };
 };
 
 
@@ -278,6 +288,36 @@ internal b32 is_new_line(struct string_view s)
 internal b32 not_new_line(struct string_view s)
 {
     return !is_new_line(s);
+}
+
+
+internal b32 is_close_bracket(struct string_view s)
+{
+    return sv_startswith(s, sv("]"));
+}
+
+
+internal b32 not_close_bracket(struct string_view s)
+{
+    return !is_close_bracket(s);
+}
+
+
+internal is_open_parenthesis(struct string_view s)
+{
+    return sv_startswith(s, sv("("));
+}
+
+
+internal is_close_parenthesis(struct string_view s)
+{
+    return sv_startswith(s, sv(")"));
+}
+
+
+internal not_close_parenthesis(struct string_view s)
+{
+    return !is_close_parenthesis(s);
 }
 
 
@@ -382,6 +422,26 @@ internal struct string_view extract_while(
 }
 
 
+internal struct markdown_figure parse_markdown_image(
+    struct string_view alt_text, 
+    struct string_view figure_info
+) {
+    struct markdown_figure result = {0};
+    result.alt_text = alloc_buffer(alt_text);
+
+    usize c = 0;
+    while (c < figure_info.size && figure_info.data[c] != ' ')
+        c++;
+    struct string_view address = {c, figure_info.data};
+    result.address = alloc_buffer(svtrim_whitespace(address));
+
+    usize i = c + 1;
+    struct string_view caption = {figure_info.size - i, figure_info.data + i};
+    result.caption = alloc_buffer(svtrim_whitespace(caption));
+    return result;
+}
+
+
 struct parser_snapshot {
     u8 letter; 
     u8 next_letter;
@@ -427,40 +487,48 @@ struct markdown_token parse_token(struct markdown_parser *parser)
         switch (p.letter) {
             case '#': {
                 result.kind = p.next_letter == '#' ? TOKEN_SECTION : TOKEN_TITLE; 
-                skip_while(parser, is_hash);
-                struct string_view title = extract_while(parser, not_new_line);
-                result.item = alloc_buffer(title);
+                u64 amount = skip_while(parser, is_hash);
+                if (amount == 1 || amount == 2) {
+                    struct string_view title = extract_while(parser, not_new_line);
+                    result.item = alloc_buffer(title);
+                } else {
+                    fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing title.\n");
+                    parser->has_error += 1;
+                }
             } break;
-            case '(': {
-                result.kind = TOKEN_OPEN_PARENTHESIS;
-                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
-            } break;
-            case ')': {
-                result.kind = TOKEN_CLOSE_PARENTHESIS;
-                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
-            } break;
-            case '[': {
-                result.kind = TOKEN_OPEN_BRACKET;
-                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
-            } break;
-            case ']': {
-                result.kind = TOKEN_CLOSE_BRACKET;
-                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
-            } break;
-            case '{': {
-                result.kind = TOKEN_OPEN_BRACE;
-                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
-            } break;
-            case '}': {
-                result.kind = TOKEN_CLOSE_BRACE;
-                fprintf(stderr, "[ERROR]: Not implemented yet\n.");
+            case '!': {
+                result.kind = TOKEN_FIGURE;
+                if (p.next_letter == '[') {
+                    parser->cursor += 2;
+                    struct string_view alt_text = extract_while(parser, not_close_bracket);
+                    if (skip_while(parser, is_close_bracket) == 1 && skip_while(parser, is_open_parenthesis) == 1) {
+                        struct string_view info = extract_while(parser, not_close_parenthesis);
+                        struct markdown_figure figure = parse_markdown_image(alt_text, info);
+                        result.figure = figure;
+                    } else {
+                        fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing figure.\n");
+                        parser->has_error += 1;
+                    }
+                } else {
+                    fprintf(stderr, "[ERROR]: Markdown parser expected figure Alt text delimeter, but found %c\n", 
+                        p.next_letter);
+                    parser->has_error += 1;
+                }
             } break;
             case '$': {
                 result.kind = p.next_letter == '$' ? TOKEN_EQUATION : TOKEN_INLINE_EQUATION;
-                skip_while(parser, is_dollar);
-                struct string_view equation = extract_while(parser, is_equation);
-                result.item = alloc_buffer(equation);
-                skip_while(parser, is_dollar);
+                u64 amount = skip_while(parser, is_dollar);
+                if (amount == 1 || amount == 2) {
+                    struct string_view equation = extract_while(parser, is_equation);
+                    result.item = alloc_buffer(equation);
+                    
+                    u64 remaining = skip_while(parser, is_dollar);
+                    if (remaining != 1 && remaining != 2)
+                        fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing equation\n");
+                } else {
+                    fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing equation.\n");
+                    parser->has_error += 1;
+                }
             } break;
             case '-': {
                 // This is an interesting case. I can be a negative number of some bs;
@@ -526,7 +594,7 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_token token)
 
 int main(int argc, char **argv) 
 {
-#define TEST_FILE "PageParser/tests/full_text1.md"
+#define TEST_FILE "PageParser/tests/figure.md"
     struct strbuffer contents = read_entire_file(TEST_FILE);
     if (contents.size == 0) {
         fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
