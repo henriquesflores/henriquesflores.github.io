@@ -217,13 +217,14 @@ struct markdown_token {
 struct markdown_node {
     struct markdown_token token; 
     struct markdown_node *children;
-//    struct markdown_node *next_sibling;
+    struct markdown_node *next_sibling;
 };
 
 
 struct markdown_tree {
     struct markdown_node *head;
     struct markdown_node *current;
+    struct markdown_node *previous;
 };
 
 
@@ -671,7 +672,8 @@ internal struct markdown_tree alloc_markdown_tree()
     result.head = alloc_markdown_node(
         (struct markdown_token) {0, TOKEN_HEAD, alloc_buffer(sv("Markdown tree"))}
     );
-    result.current = result.head;
+    result.current  = result.head;
+    result.previous = result.head;
     return result;
 }
 
@@ -680,7 +682,13 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_token token)
 {
     struct markdown_node *n;
     if ((n = alloc_markdown_node(token))) {
-        t->current->children = n;
+        if (t->current->token.kind == token.kind) {
+            t->current->next_sibling = n;
+        } else {
+            t->current = t->previous;
+            t->current->children = n;
+            t->previous = t->current;
+        }
         t->current = n;
         return 1;
     };
