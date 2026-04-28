@@ -661,6 +661,7 @@ internal struct markdown_node *alloc_markdown_node(struct markdown_token t)
     if (n) {
         n->token = t;
         n->children = 0;
+        n->next_sibling = 0;
     }
     return n;
 }
@@ -696,6 +697,12 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_token token)
 }
 
 
+internal void emit_tex(char *filepath, struct markdown_tree t)
+{
+
+}
+
+
 int main(int argc, char **argv) 
 {
 #define TEST_FILE "PageParser/tests/unordered_list.md"
@@ -719,6 +726,9 @@ int main(int argc, char **argv)
         struct markdown_token t = parse_token(&parser);
         parser.has_error += !add_node(&doc, t); 
     } while (is_parsing(parser));
+
+    emit_tex(TEST_FILE, doc);
+//    emit_html();
 
     free_arena(&global_arena);
     free_strbuffer(&contents);
