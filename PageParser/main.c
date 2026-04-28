@@ -215,6 +215,7 @@ struct markdown_token {
 struct markdown_node {
     struct markdown_token token; 
     struct markdown_node *children;
+//    struct markdown_node *next_sibling;
 };
 
 
@@ -348,6 +349,13 @@ internal not_close_parenthesis(struct string_view s)
 internal is_dot(struct string_view s)
 {
     return sv_startswith(s, sv("."));
+}
+
+
+internal is_list_identifier(struct string_view s)
+{
+    char *c[] = {"*", "+", "-"};
+    return sv_startswith_any(s, c, ARRAY_LEN(c));
 }
 
 
@@ -563,9 +571,17 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                     parser->has_error += 1;
                 }
             } break;
-            case '-': {
-                fprintf(stderr, "[ERROR]: This markdown case is not implemented yet\n");
-                exit(1);
+            case '-': 
+            case '*':
+            case '+': {
+                result.kind = TOKEN_LIST_ELEMENT;
+                if (skip_while(parser, is_list_identifier) == 1) {
+                    struct string_view item = extract_while(parser, not_new_line);
+                    result.element = (struct markdown_list_element) {0, alloc_buffer(item)};
+                } else {
+                    fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing list element\n");
+                    parser->has_error += 1;
+                }
             } break;
             case '0':
             case '1':
@@ -641,7 +657,7 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_token token)
 
 int main(int argc, char **argv) 
 {
-#define TEST_FILE "PageParser/tests/list.md"
+#define TEST_FILE "PageParser/tests/unordered_list.md"
     struct strbuffer contents = read_entire_file(TEST_FILE);
     if (contents.size == 0) {
         fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
