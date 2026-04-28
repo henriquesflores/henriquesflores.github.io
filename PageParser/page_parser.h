@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h> 
+#include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
 
@@ -12,9 +13,9 @@ struct string_view {
 };
 
 
-internal struct string_view sv(char *s) 
+internal struct string_view sv(char *s)
 {
-    return (struct string_view) {strlen(s), s};
+    return (struct string_view) {strlen(s), CAST(u8 *, s)};
 }
 
 
@@ -232,7 +233,7 @@ internal b32 sv_isequal(
     struct string_view s, 
     struct string_view w
 ) { 
-    return (s.size == w.size && strncmp(s.data, w.data, s.size) == 0);
+    return (s.size == w.size && strncmp(CAST(char *, s.data), CAST(char *, w.data), s.size) == 0);
 }
 
 
@@ -240,7 +241,7 @@ internal b32 sv_startswith(
     struct string_view s,
     struct string_view c
 ) {
-    return (s.size >= c.size && strncmp(s.data, c.data, c.size) == 0);
+    return (s.size >= c.size && strncmp(CAST(char *, s.data), CAST(char *, c.data), c.size) == 0);
 }
 
 
@@ -274,7 +275,7 @@ internal b32 sv_startswith_any(
     char **cstr_array, 
     usize array_size
 ) {
-    for (int i = 0; i < array_size; i++) 
+    for (int i = 0; i < CAST(int, array_size); i++) 
         if (sv_startswith(s, sv(cstr_array[i])))
             return 1;
     return 0;
@@ -286,7 +287,7 @@ internal b32 sv_endswith_any(
     char **cstr_array, 
     usize array_size
 ) {
-    for (int i = 0; i < array_size; i++) 
+    for (int i = 0; i < CAST(int, array_size); i++) 
         if (sv_endswith(s, sv(cstr_array[i])))
             return 1;
     return 0;
@@ -337,31 +338,31 @@ internal b32 not_close_bracket(struct string_view s)
 }
 
 
-internal is_open_parenthesis(struct string_view s)
+internal b32 is_open_parenthesis(struct string_view s)
 {
     return sv_startswith(s, sv("("));
 }
 
 
-internal is_close_parenthesis(struct string_view s)
+internal b32 is_close_parenthesis(struct string_view s)
 {
     return sv_startswith(s, sv(")"));
 }
 
 
-internal not_close_parenthesis(struct string_view s)
+internal b32 not_close_parenthesis(struct string_view s)
 {
     return !is_close_parenthesis(s);
 }
 
 
-internal is_dot(struct string_view s)
+internal b32 is_dot(struct string_view s)
 {
     return sv_startswith(s, sv("."));
 }
 
 
-internal is_list_identifier(struct string_view s)
+internal b32 is_list_identifier(struct string_view s)
 {
     char *c[] = {"*", "+", "-"};
     return sv_startswith_any(s, c, ARRAY_LEN(c));
@@ -526,7 +527,7 @@ internal b32 is_equation(struct string_view s)
 }
 
 
-internal u8 *errormsg() 
+internal u8 *errormsg(void) 
 {
     return "[ERROR]: Markdown parser encountered error while parsing ";
 }
@@ -667,7 +668,7 @@ internal struct markdown_node *alloc_markdown_node(struct markdown_token t)
 }
 
 
-internal struct markdown_tree alloc_markdown_tree()
+internal struct markdown_tree alloc_markdown_tree(void)
 {
     struct markdown_tree result = {0};
     result.head = alloc_markdown_node(
@@ -697,40 +698,4 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_token token)
 }
 
 
-internal void emit_tex(char *filepath, struct markdown_tree t)
-{
-
-}
-
-
-int main(int argc, char **argv) 
-{
-#define TEST_FILE "PageParser/tests/unordered_list.md"
-    struct strbuffer contents = read_entire_file(TEST_FILE);
-    if (contents.size == 0) {
-        fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
-        exit(0);
-    }
-
-    global_arena = arena_init(KILO(5));
-
-    struct markdown_parser parser = {
-        .contents  = contents.buffer, 
-        .has_error = 0,
-        .length    = contents.size, 
-        .cursor    = 0
-    };
-    
-    struct markdown_tree doc = alloc_markdown_tree();
-    do {
-        struct markdown_token t = parse_token(&parser);
-        parser.has_error += !add_node(&doc, t); 
-    } while (is_parsing(parser));
-
-    emit_tex(TEST_FILE, doc);
-//    emit_html();
-
-    free_arena(&global_arena);
-    free_strbuffer(&contents);
-    return 0;
-}
+internal void emit_tex(char *filepath, struct markdown_tree t);
