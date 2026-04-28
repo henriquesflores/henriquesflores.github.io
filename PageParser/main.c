@@ -705,7 +705,7 @@ int main(int argc, char **argv)
         exit(0);
     }
 
-    global_arena = arena_init(MEGA(2));
+    global_arena = arena_init(KILO(5));
 
     struct markdown_parser parser = {
         .contents  = contents.buffer, 
