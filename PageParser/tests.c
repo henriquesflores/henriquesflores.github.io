@@ -81,8 +81,7 @@ int main(int argc, char **argv)
     puts("Start test suite");
     puts("========================================");
     for (int i = 0; i < ARRAY_LEN(tests); i++) {
-        b32 test_result = tests[i].test(tests[i].filepath);
-        if (test_result) {
+        if (tests[i].test(tests[i].filepath)) {
             printf("\t%ld: [PASSED] %s\n", i + 1, tests[i].name);
         } else { 
             printf("\t%ld: [FAILED] %s\n", i + 1, tests[i].name);

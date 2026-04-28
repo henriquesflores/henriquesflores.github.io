@@ -698,4 +698,33 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_token token)
 }
 
 
+internal struct markdown_tree parse_markdown(char *filepath)
+{
+    struct strbuffer contents = read_entire_file(TEST_FILE);
+    if (contents.size == 0) {
+        fprintf(stderr, "[ERROR] Input file is empty. Nothing to do.");
+        exit(0);
+    }
+
+    if (global_arena.capacity == 0)
+        global_arena = arena_init(KILO(5));
+
+    struct markdown_parser parser = {
+        .contents  = contents.buffer, 
+        .has_error = 0,
+        .length    = contents.size, 
+        .cursor    = 0
+    };
+    
+    struct markdown_tree doc = alloc_markdown_tree();
+    do {
+        struct markdown_token t = parse_token(&parser);
+        parser.has_error += !add_node(&doc, t); 
+    } while (is_parsing(parser));
+
+    free_strbuffer(&contents);
+    return doc;
+}
+
+
 internal void emit_tex(char *filepath, struct markdown_tree t);
