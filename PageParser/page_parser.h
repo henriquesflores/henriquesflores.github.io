@@ -10,13 +10,18 @@
 #include "types.h"
 
 
+#ifndef PGDEF
+    #define PGDEF 
+#endif
+
+
 struct string_view {
     usize size;
     u8 *data;
 };
 
 
-internal struct string_view sv(char *s);
+PGDEF struct string_view sv(char *s);
 
 
 struct memory_arena {
@@ -27,12 +32,12 @@ struct memory_arena {
 
 global_variable struct memory_arena global_arena;
 
-internal struct memory_arena arena_init(u64 size);
-internal void free_arena(struct memory_arena *a);
-internal void *_pushStructArenaImpl(struct memory_arena *a, usize size);
-internal void *_pushStructArenaImpl(struct memory_arena *a, usize size);
+PGDEF struct memory_arena arena_init(u64 size);
+PGDEF void free_arena(struct memory_arena *a);
+PGDEF void *_pushStructArenaImpl(struct memory_arena *a, usize size);
+PGDEF void *_pushStructArenaImpl(struct memory_arena *a, usize size);
 #define PUSH_STRUCT(arena, type) _pushStructArenaImpl(&(arena), sizeof(type))
-internal void *_pushArenaArrayImpl(struct memory_arena *a, usize struct_size, usize array_size);
+PGDEF void *_pushArenaArrayImpl(struct memory_arena *a, usize struct_size, usize array_size);
 #define PUSH_ARRAY(arena, type, size) _pushArenaArrayImpl(&(arena), sizeof(type), size)
 
 
@@ -42,9 +47,9 @@ struct strbuffer {
 };
 
 
-internal struct strbuffer alloc_buffer(struct string_view s);
-internal void free_strbuffer(struct strbuffer *c);
-internal struct strbuffer read_entire_file(char *filename);
+PGDEF struct strbuffer alloc_buffer(struct string_view s);
+PGDEF void free_strbuffer(struct strbuffer *c);
+PGDEF struct strbuffer read_entire_file(char *filename);
 
 
 enum token_kind {
@@ -125,62 +130,62 @@ struct markdown_tree {
 };
 
 
-internal b32 sv_isequal(struct string_view s, struct string_view w);
-internal b32 sv_startswith(struct string_view s, struct string_view c);
-internal b32 sv_endswith(struct string_view s, struct string_view c);
-internal u64 svtoint(struct string_view s);
-internal b32 sv_startswith_any(struct string_view s, char **cstr_array, usize array_size);
-internal b32 sv_endswith_any(struct string_view s, char **cstr_array, usize array_size);
+PGDEF b32 sv_isequal(struct string_view s, struct string_view w);
+PGDEF b32 sv_startswith(struct string_view s, struct string_view c);
+PGDEF b32 sv_endswith(struct string_view s, struct string_view c);
+PGDEF u64 svtoint(struct string_view s);
+PGDEF b32 sv_startswith_any(struct string_view s, char **cstr_array, usize array_size);
+PGDEF b32 sv_endswith_any(struct string_view s, char **cstr_array, usize array_size);
 
-internal b32 is_whitespace(struct string_view s);
-internal b32 not_whitespace(struct string_view s);
-internal b32 is_new_line(struct string_view s);
-internal b32 not_new_line(struct string_view s);
-internal b32 is_open_bracket(struct string_view s);
-internal b32 is_close_bracket(struct string_view s);
-internal b32 not_close_bracket(struct string_view s);
-internal b32 is_open_parenthesis(struct string_view s);
-internal b32 is_close_parenthesis(struct string_view s);
-internal b32 not_close_parenthesis(struct string_view s);
-internal b32 is_dot(struct string_view s);
-internal b32 is_list_identifier(struct string_view s);
-internal b32 is_numeric(struct string_view s);
-internal struct string_view svtrim_while(
+PGDEF b32 is_whitespace(struct string_view s);
+PGDEF b32 not_whitespace(struct string_view s);
+PGDEF b32 is_new_line(struct string_view s);
+PGDEF b32 not_new_line(struct string_view s);
+PGDEF b32 is_open_bracket(struct string_view s);
+PGDEF b32 is_close_bracket(struct string_view s);
+PGDEF b32 not_close_bracket(struct string_view s);
+PGDEF b32 is_open_parenthesis(struct string_view s);
+PGDEF b32 is_close_parenthesis(struct string_view s);
+PGDEF b32 not_close_parenthesis(struct string_view s);
+PGDEF b32 is_dot(struct string_view s);
+PGDEF b32 is_list_identifier(struct string_view s);
+PGDEF b32 is_numeric(struct string_view s);
+PGDEF struct string_view svtrim_while(
     struct string_view s, 
     b32 (*predicate)(int)
 );
-internal struct string_view svtrim_whitespace(struct string_view s);
-internal b32 is_hash(struct string_view s);
-internal b32 is_dollar(struct string_view s);
-internal b32 is_in_bounds(struct markdown_parser *p);
-internal b32 cursor_in_bounds(struct markdown_parser *p, usize cursor);
-internal u8 get(struct markdown_parser *p);
-internal u8 *at(struct markdown_parser *p);
-internal struct string_view asv(struct markdown_parser *p);
-internal b32 is_parsing(struct markdown_parser p);
-internal u64 skip_while(
+PGDEF struct string_view svtrim_whitespace(struct string_view s);
+PGDEF b32 is_hash(struct string_view s);
+PGDEF b32 is_dollar(struct string_view s);
+PGDEF b32 is_in_bounds(struct markdown_parser *p);
+PGDEF b32 cursor_in_bounds(struct markdown_parser *p, usize cursor);
+PGDEF u8 get(struct markdown_parser *p);
+PGDEF u8 *at(struct markdown_parser *p);
+PGDEF struct string_view asv(struct markdown_parser *p);
+PGDEF b32 is_parsing(struct markdown_parser p);
+PGDEF u64 skip_while(
     struct markdown_parser *p, 
     b32 (*predicate)(struct string_view)
 );
-internal struct string_view extract_while(
+PGDEF struct string_view extract_while(
     struct markdown_parser *p, 
     b32 (*predicate)(struct string_view)
 );
-internal struct markdown_figure parse_markdown_image(
+PGDEF struct markdown_figure parse_markdown_image(
     struct string_view alt_text, 
     struct string_view figure_info
 );
 
-internal struct parser_snapshot get_snapshot(struct markdown_parser *p);
-internal b32 is_paragraph(struct string_view s);
-internal b32 is_equation(struct string_view s);
+PGDEF struct parser_snapshot get_snapshot(struct markdown_parser *p);
+PGDEF b32 is_paragraph(struct string_view s);
+PGDEF b32 is_equation(struct string_view s);
 
-internal struct markdown_token parse_token(struct markdown_parser *parser);
-internal struct markdown_node *alloc_markdown_node(struct markdown_token t);
-internal struct markdown_tree alloc_markdown_tree(void);
-internal b32 add_node(struct markdown_tree *t, struct markdown_token token);
-internal struct markdown_tree parse_markdown(char *filepath);
+PGDEF struct markdown_token parse_token(struct markdown_parser *parser);
+PGDEF struct markdown_node *alloc_markdown_node(struct markdown_token t);
+PGDEF struct markdown_tree alloc_markdown_tree(void);
+PGDEF b32 add_node(struct markdown_tree *t, struct markdown_token token);
+PGDEF struct markdown_tree parse_markdown(char *filepath);
 
-internal void emit_tex(char *filepath, struct markdown_tree t);
-internal void emit_html(char *filepath, struct markdown_tree t);
+PGDEF void emit_tex(char *filepath, struct markdown_tree t);
+PGDEF void emit_html(char *filepath, struct markdown_tree t);
 #endif
