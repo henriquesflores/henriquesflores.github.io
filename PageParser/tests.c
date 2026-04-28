@@ -9,56 +9,104 @@ struct test_case {
 #define make_test(x) {"PageParser\\tests\\" #x ".md", #x, test_##x}
 
 
+internal b32 compare_nodes(
+    struct markdown_node *n1,
+    struct markdown_node *n2
+) {
+    b32 result = 0;
+    if (n1 && n2) {
+        result += compare_tokens(n1, n2);
+        struct markdown_node *sibling1 = n1->next_sibling;
+        struct markdown_node *sibling2 = n2->next_sibling;
+        while (sibling1 && sibling2) {
+            result += compare_nodes(sibling1, sibling2);
+            sibling1 = sibling1->next_sibling;
+            sibling2 = sibling2->next_sibling;
+        } 
+    }
+    return result == 0;
+}
+
+
+internal b32 compare_trees(
+    struct markdown_tree t1,
+    struct markdown_tree t2
+) {
+    struct markdown_node *n1 = t1.head;
+    struct markdown_node *n2 = t2.head;
+    compare_nodes(n1, n2);
+    return 0
+}
+
+
 internal b32 test_empty_title(u8 *filepath) 
 {
-    return 0;
+    b32 result = 0;
+    struct markdown_tree doc = parse_markdown(filepath);
+
+    struct markdown_tree *e = 0;
+    result += !addc_node(e, 
+        (struct markdown_token) {
+            .new_line_space=0,
+            .kind=TOKEN_TITLE,
+            .item=(struct strbuffer){0, ""}
+    });
+    return result && compare_trees(doc, *e);
 }
 
 
 internal b32 test_equation(u8 *filepath) 
 {
+    struct markdown_tree doc = parse_markdown(filepath);
     return 0;
 }
 
 
 internal b32 test_empty(u8 *filepath)
 {
+    struct markdown_tree doc = parse_markdown(filepath);
     return 0;
 }
 
 
 internal b32 test_figure(u8 *filepath)
 {
+    struct markdown_tree doc = parse_markdown(filepath);
     return 0;
 }
 
 
 internal b32 test_link(u8 *filepath)
 {
+    struct markdown_tree doc = parse_markdown(filepath);
     return 0;
 }
 
 
 internal b32 test_list(u8 *filepath) 
 {
+    struct markdown_tree doc = parse_markdown(filepath);
     return 0;
 }
 
 
 internal b32 test_paragraph(u8 *filepath) 
 {
+    struct markdown_tree doc = parse_markdown(filepath);
     return 0;
 }
 
 
 internal b32 test_title(u8 *filepath) 
 {
+    struct markdown_tree doc = parse_markdown(filepath);
     return 0;
 }
 
 
 internal b32 test_unordered_list(u8 *filepath) 
 {
+    struct markdown_tree doc = parse_markdown(filepath);
     return 0;
 }
 

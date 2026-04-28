@@ -698,6 +698,25 @@ internal b32 add_node(struct markdown_tree *t, struct markdown_token token)
 }
 
 
+internal b32 addc_node(struct markdown_tree *t, struct markdown_token token)
+{
+    assert(global_arena.capacity);
+    if (!t) {
+        struct markdown_tree *out = 0;
+        if (out = PUSH_STRUCT(global_arena, struct markdown_tree)) {
+            struct markdown_tree tree = alloc_markdown_tree();
+            out->head     = tree.head;
+            out->current  = tree.current;
+            out->previous = tree.previous;
+            t = out;
+        } else {
+            return 0;
+        }
+    }
+    return t && add_node(t, token);
+}
+
+
 internal struct markdown_tree parse_markdown(char *filepath)
 {
     struct strbuffer contents = read_entire_file(TEST_FILE);
