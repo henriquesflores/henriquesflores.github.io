@@ -164,12 +164,7 @@ enum token_kind {
     TOKEN_SECTION,
     TOKEN_SUBSECTION, 
     TOKEN_LIST_ELEMENT,
-    TOKEN_OPEN_BRACKET, 
-    TOKEN_CLOSE_BRACKET, 
-    TOKEN_OPEN_PARENTHESIS,
-    TOKEN_CLOSE_PARENTHESIS,
-    TOKEN_OPEN_BRACE,
-    TOKEN_CLOSE_BRACE,
+    TOKEN_LINK,
     TOKEN_PARAGRAPH,
     TOKEN_INLINE_EQUATION,
     TOKEN_EQUATION,
@@ -201,11 +196,18 @@ struct markdown_list_element {
 };
 
 
+struct markdown_link {
+    struct strbuffer text; 
+    struct strbuffer url;
+};
+
+
 struct markdown_token {
     u64 new_line_space;
     enum token_kind kind;
     union {
         struct strbuffer item;
+        struct markdown_link link;
         struct markdown_figure figure;
         struct markdown_list_element element;
     };
@@ -313,6 +315,12 @@ internal b32 is_new_line(struct string_view s)
 internal b32 not_new_line(struct string_view s)
 {
     return !is_new_line(s);
+}
+
+
+internal b32 is_open_bracket(struct string_view s)
+{
+    return sv_startswith(s, sv("["));
 }
 
 
@@ -517,6 +525,12 @@ internal b32 is_equation(struct string_view s)
 }
 
 
+internal u8 *errormsg() 
+{
+    return "[ERROR]: Markdown parser encountered error while parsing ";
+}
+
+
 internal 
 struct markdown_token parse_token(struct markdown_parser *parser)
 {
@@ -533,7 +547,7 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                     struct string_view title = extract_while(parser, not_new_line);
                     result.item = alloc_buffer(title);
                 } else {
-                    fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing title.\n");
+                    fprintf(stderr, "%s%s\n", errormsg(), "title");
                     parser->has_error += 1;
                 }
             } break;
@@ -547,12 +561,11 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                         struct markdown_figure figure = parse_markdown_image(alt_text, info);
                         result.figure = figure;
                     } else {
-                        fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing figure.\n");
+                        fprintf(stderr, "%s%s\n", errormsg(), "figure");
                         parser->has_error += 1;
                     }
                 } else {
-                    fprintf(stderr, "[ERROR]: Markdown parser expected figure Alt text delimeter, but found %c\n", 
-                        p.next_letter);
+                    fprintf(stderr, "%s%s\n", errormsg(), "alt text delimiter");
                     parser->has_error += 1;
                 }
             } break;
@@ -565,9 +578,29 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                     
                     u64 remaining = skip_while(parser, is_dollar);
                     if (remaining != 1 && remaining != 2)
-                        fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing equation\n");
+                        fprintf(stderr, "%s%s\n", errormsg(), "equation");
                 } else {
-                    fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing equation.\n");
+                    fprintf(stderr, "%s%s\n", errormsg(), "equation");
+                    parser->has_error += 1;
+                }
+            } break;
+            case '[': {
+                result.kind = TOKEN_LINK; 
+                if (skip_while(parser, is_open_bracket) == 1) {
+                    struct string_view link_text = extract_while(parser, not_close_bracket);
+                    if (skip_while(parser, is_open_parenthesis) == 1) {
+                        struct string_view url = extract_while(parser, not_close_parenthesis);
+                        result.link = (struct markdown_link) {alloc_buffer(link_text), alloc_buffer(url)};
+                        if (skip_while(parser, is_close_parenthesis) != 1) {
+                            fprintf(stderr, "%s%s\n", errormsg(), "link");
+                            parser->has_error += 1;
+                        }
+                    } else {
+                        fprintf(stderr, "%s%s\n", errormsg(), "link");
+                        parser->has_error += 1;
+                    }
+                } else {
+                    fprintf(stderr, "%s%s\n", errormsg(), "link");
                     parser->has_error += 1;
                 }
             } break;
@@ -579,7 +612,7 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                     struct string_view item = extract_while(parser, not_new_line);
                     result.element = (struct markdown_list_element) {0, alloc_buffer(item)};
                 } else {
-                    fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing list element\n");
+                    fprintf(stderr, "%s%s\n", errormsg(), "list element");
                     parser->has_error += 1;
                 }
             } break;
@@ -601,11 +634,11 @@ struct markdown_token parse_token(struct markdown_parser *parser)
                         struct string_view item = extract_while(parser, not_new_line);
                         result.element = (struct markdown_list_element) {parsed_number, alloc_buffer(item)};
                     } else { 
-                        fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing list element\n");
+                        fprintf(stderr, "%s%s\n", errormsg(), "list element");
                         parser->has_error += 1;
                     }
                 } else {
-                    fprintf(stderr, "[ERROR]: Markdown parser encountered error while parsing list number\n");
+                    fprintf(stderr, "%s%s\n", errormsg(), "list number");
                     parser->has_error += 1;
                 }
             } break;
